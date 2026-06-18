@@ -5,6 +5,9 @@ Firmware for the **Autosport Labs ESP32-CAN-X2** (ESP32-S3) that lets you run an
 actually fitted with a **manual** gearbox — without ever putting TCM traffic
 onto the real car's CAN bus.
 
+I inadvertently discovered that Longan Lab's stolen MCP2515 libary is shit. So I rebuilt it and repaired it>>>
+https://github.com/jakka351/mcp_jakka 
+
 The device is a one-way gateway:
 
 ```
