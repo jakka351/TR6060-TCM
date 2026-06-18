@@ -5,9 +5,6 @@ Firmware for the **Autosport Labs ESP32-CAN-X2** (ESP32-S3) that lets you run an
 actually fitted with a **manual** gearbox — without ever putting TCM traffic
 onto the real car's CAN bus.
 
-I inadvertently discovered that Longan Lab's stolen MCP2515 libary is shit. So I rebuilt it and repaired it>>>
-https://github.com/jakka351/mcp_jakka 
-
 The device is a one-way gateway:
 
 ```
@@ -31,7 +28,7 @@ The device is a one-way gateway:
   vehicle for bench testing.
 * Data flows **vehicle → TCM** by default, with one optional, tightly-scoped
   reverse path: a **diagnostic bridge** that relays the TCM's `0x7E9` response
-  back to an OBD tester (see §4a). It is off by default.
+  back to an OBD tester (see §4a). It is **on by default**.
 
 A WiFi web dashboard provides a live CAN sniffer, decoded TCM telemetry,
 editable forwarding rules, a TCM-bus frame injector, and all configuration.
@@ -166,13 +163,12 @@ Flow Control → Consecutive Frames) just work — the tester and TCM run the
 ISO-TP state machine; the gateway only relays frames with sub-millisecond
 latency. No ISO-TP/UDS stack is implemented or needed.
 
-> ⚠️ **This changes the safety posture.** To put `0x7E9` back onto the vehicle
-> bus, that controller must leave hardware listen-only and run in **NORMAL**
-> mode — so it will also ACK vehicle traffic. The change is **off by default**,
-> requires a **restart**, and even when on, the **only** frame ID ever
-> transmitted on the car is the response ID (`0x7E9`). The dashboard banner
-> turns amber and reads *"VEHICLE BUS — NORMAL (diag bridge: TX 0x7E9 only)"*
-> whenever this is active, so the bus posture is always visible at a glance.
+> **ON by default.** To put `0x7E9` back onto the vehicle bus, that controller
+> runs in TWAI **NORMAL** mode (so it also ACKs vehicle traffic). The **only**
+> frame ID ever transmitted on the car is the response ID (`0x7E9`). The
+> dashboard banner reads *"VEHICLE BUS — NORMAL (diag bridge: TX 0x7E9 only)"*
+> so the bus posture is always visible. To run the vehicle bus fully silent
+> instead, untick the Diagnostic Bridge in Settings and restart.
 
 When the bridge is on but no tester is connected, there is no `0x7E9` traffic,
 so nothing is transmitted on the car (apart from CAN ACKs inherent to NORMAL
@@ -201,26 +197,22 @@ Configuration is stored in NVS (`Preferences`), so it survives reboots.
 There are two mutually-exclusive vehicle-bus postures, chosen at boot from a
 persisted flag and always shown on the dashboard banner:
 
-**Default — Diagnostic Bridge OFF (banner green, "LISTEN-ONLY / SILENT"):**
-* The vehicle bus runs on the **internal TWAI in `TWAI_MODE_LISTEN_ONLY`** — a
-  hardware guarantee of silence (no frames, no ACK, no error frames) — **and**
-  the only transmit function, `vehSend()`, hard-refuses while listen-only. Two
-  independent layers. Nothing can reach the car.
-* The injector and all simulated traffic can only reach the **TCM bus**.
-
-**Diagnostic Bridge ON (banner amber, "NORMAL (diag bridge: TX 0x7E9 only)"):**
+**Default — Diagnostic Bridge ON (banner amber, "NORMAL (diag bridge: TX 0x7E9 only)"):**
 * The vehicle bus runs in **`TWAI_MODE_NORMAL`** so the TCM's diagnostic
-  response can be relayed back to the tester; the node therefore also ACKs
-  vehicle traffic.
+  response is relayed back to the tester; the node therefore also ACKs vehicle
+  traffic.
 * The data plane back to the car is still a **tight whitelist of one ID**: the
   firmware only ever calls `vehSend()` for `diagRespId` (`0x7E9`). No other TCM
-  frame, simulated frame, or injected frame is ever transmitted on the car.
+  frame, simulated frame, or injected frame is transmitted on the car.
+
+**Diagnostic Bridge OFF (banner green, "LISTEN-ONLY / SILENT"):**
+* The vehicle bus runs on the **internal TWAI in `TWAI_MODE_LISTEN_ONLY`** — a
+  hardware guarantee of silence (no frames, no ACK, no error frames) — **and**
+  `vehSend()` hard-refuses while listen-only. Nothing can reach the car. Untick
+  the bridge in Settings and restart to use this mode.
 
 General:
 * This is bench/development tooling for an off-road / closed-course project.
-  Validate behaviour on the bench before connecting a live vehicle, and never
-  rely on a development gateway while driving in traffic.
-* Leave the Diagnostic Bridge **off** unless a tester session needs it.
 
 ---
 

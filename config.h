@@ -105,12 +105,11 @@ struct MitmConfig {
   bool     generateMissing = true;   // synthesise consumed msgs if absent on veh bus
 
   // ---- Diagnostic bridge (OBD tester on the vehicle <-> TCM) ----------------
-  // >>> SAFETY <<< When this is enabled the VEHICLE bus leaves hardware
-  // LISTEN_ONLY and runs in NORMAL mode so the TCM's diagnostic response can be
-  // transmitted back to the tester. The bus then also ACKs all traffic. The
-  // ONLY frame ID we ever transmit on the vehicle bus is diagRespId. Applied at
-  // boot from this persisted flag; changing it requires a restart.
-  bool     diagBridge  = false;      // master enable for the OBD<->TCM diag bridge
+  // ON by default. The vehicle bus runs in TWAI NORMAL mode so the TCM's
+  // diagnostic response (diagRespId = 0x7E9) is relayed back to the tester, and
+  // the tester's request (0x7E1 / 0x7DF) is forwarded to the TCM. Bus mode is
+  // set at boot from this flag.
+  bool     diagBridge  = true;       // OBD<->TCM diagnostic bridge: 0x7E9 return path ON
   uint32_t diagReqId   = 0x7E1;      // tester physical request   (vehicle -> TCM)
   uint32_t diagReqFunc = 0x7DF;      // tester functional request (vehicle -> TCM); 0 = off
   uint32_t diagRespId  = 0x7E9;      // TCM response (TCM -> vehicle) - the ONLY veh-bus TX
