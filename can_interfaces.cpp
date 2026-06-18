@@ -1,15 +1,20 @@
+#include <mcp_can.h>
+#include <mcp_can_dfs.h>
+
 // =============================================================================
 //  can_interfaces.cpp
 // =============================================================================
 #include "can_interfaces.h"
 #include <SPI.h>
-#include "mcp_canbus.h"      // Autosport Labs / Longan Labs MCP2515 library
+//#include "mcp_canbus.h"      // Autosport Labs / Longan Labs MCP2515 library
 #include "driver/twai.h"     // ESP-IDF TWAI (built into the ESP32 Arduino core)
+#include "freertos/FreeRTOS.h"   // pdMS_TO_TICKS, TickType_t
 
 BusStats g_vehStats;
 BusStats g_tcmStats;
 bool     g_vehOnline = false;
 bool     g_tcmOnline = false;
+bool     g_vehListenOnly = true;   // resolved in initVehicleBus()
 
 // MCP2515 object on the board's CS pin (TCM bus).
 static MCP_CAN s_mcp(MCP2515_CS_GPIO);
@@ -38,17 +43,23 @@ static byte mcpBitrate(uint32_t br) {
 }
 
 // -----------------------------------------------------------------------------
-//  VEHICLE bus = internal TWAI in LISTEN-ONLY mode.
+//  VEHICLE bus = internal TWAI.
 //
-//  In TWAI_MODE_LISTEN_ONLY the controller never sends a dominant bit: no data
-//  frames, no acknowledgements, no error/overload frames.  It is electrically a
-//  pure observer of the vehicle bus.
+//  Default (diagBridge OFF): TWAI_MODE_LISTEN_ONLY - the controller never sends
+//  a dominant bit (no frames, no ACK, no error frames); a pure observer.
+//
+//  Diagnostic bridge ON: TWAI_MODE_NORMAL so the TCM's diagnostic response can
+//  be transmitted back to the tester. In NORMAL mode the node also ACKs all bus
+//  traffic. Software still only ever calls vehSend() for the response ID.
 // -----------------------------------------------------------------------------
 static bool initVehicleBus() {
+  g_vehListenOnly = !g_cfg.diagBridge;
+  twai_mode_t mode = g_vehListenOnly ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
+
   twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
-      (gpio_num_t)CAN1_TX_GPIO, (gpio_num_t)CAN1_RX_GPIO, TWAI_MODE_LISTEN_ONLY);
+      (gpio_num_t)CAN1_TX_GPIO, (gpio_num_t)CAN1_RX_GPIO, mode);
   g.rx_queue_len = 64;
-  g.tx_queue_len = 0;                       // we never transmit on the vehicle bus
+  g.tx_queue_len = g_vehListenOnly ? 0 : 16;   // no TX queue at all when silent
   twai_timing_config_t t = twaiTiming(g_cfg.vehBitrate);
   twai_filter_config_t fcfg = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -94,6 +105,20 @@ bool vehReceive(CanFrame &f) {
   g_vehStats.rx++;
   g_vehStats._fpsAccum++;
   return true;
+}
+
+// GUARDED vehicle-bus transmit. Refuses unless the diagnostic bridge has put
+// the bus in NORMAL mode. This is the only path that can transmit on the car.
+bool vehSend(const CanFrame &f) {
+  if (g_vehListenOnly) return false;          // hard guard: silent bus, never TX
+  twai_message_t m = {};
+  m.identifier = f.id;
+  m.extd = f.extd ? 1 : 0;
+  m.data_length_code = f.len > 8 ? 8 : f.len;
+  memcpy(m.data, f.data, m.data_length_code);
+  if (twai_transmit(&m, pdMS_TO_TICKS(20)) == ESP_OK) { g_vehStats.tx++; return true; }
+  g_vehStats.err++;
+  return false;
 }
 
 bool tcmReceive(CanFrame &f) {

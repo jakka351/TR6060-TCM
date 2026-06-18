@@ -10,6 +10,8 @@ FrameRecord  g_sniff[MAX_SNIFF_IDS];
 uint32_t     g_forwardedCount = 0;
 uint32_t     g_blockedCount   = 0;
 uint32_t     g_overrideCount  = 0;
+uint32_t     g_diagToTcm      = 0;
+uint32_t     g_diagToVeh      = 0;
 
 // Bench-idle simulation defaults (used only when generateMissing is on AND no
 // live vehicle engine data is arriving - i.e. the rig is on the bench).
@@ -105,6 +107,17 @@ void mitmOnVehicleFrame(const CanFrame &f) {
   // 1) Always decode for the dashboard / simulated-vehicle state.
   fgDecodeVehicleFrame(f, g_veh);
 
+  // 1a) Diagnostic bridge: relay a tester's request straight to the TCM. This
+  // is the ordinary, always-safe vehicle -> TCM direction, handled before the
+  // rule table so a stray BLOCK rule can never break a diagnostic session.
+  if (g_cfg.diagBridge &&
+      (f.id == g_cfg.diagReqId || (g_cfg.diagReqFunc && f.id == g_cfg.diagReqFunc))) {
+    tcmSend(f);
+    g_diagToTcm++;
+    sniffRecord(f.id, /*bus=*/0, f.data, f.len, /*forwarded=*/true);
+    return;
+  }
+
   // 2) Decide whether (and how) to forward to the TCM bus.
   bool forwarded = false;
   if (g_cfg.simEnabled) {
@@ -133,11 +146,22 @@ void mitmOnVehicleFrame(const CanFrame &f) {
 }
 
 // -----------------------------------------------------------------------------
-//  TCM-bus frame handler  (decode only - NEVER forwarded toward the vehicle)
+//  TCM-bus frame handler.
+//
+//  Telemetry is decoded for the dashboard. The ONLY frame ever relayed back to
+//  the vehicle bus is the diagnostic response (diagRespId), and only when the
+//  diagnostic bridge is enabled (which is also what put the vehicle bus into a
+//  transmit-capable mode). Every other TCM frame stays on the TCM side.
 // -----------------------------------------------------------------------------
 void mitmOnTcmFrame(const CanFrame &f) {
   fgDecodeTcmFrame(f, g_tcm);
-  sniffRecord(f.id, /*bus=*/1, f.data, f.len, false);
+
+  bool relayed = false;
+  if (g_cfg.diagBridge && f.id == g_cfg.diagRespId) {
+    relayed = vehSend(f);            // reverse bridge: TCM response -> tester
+    if (relayed) g_diagToVeh++;
+  }
+  sniffRecord(f.id, /*bus=*/1, f.data, f.len, relayed);
 }
 
 // -----------------------------------------------------------------------------

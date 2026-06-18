@@ -22,12 +22,21 @@ extern BusStats g_vehStats;
 extern BusStats g_tcmStats;
 extern bool     g_vehOnline;
 extern bool     g_tcmOnline;
+extern bool     g_vehListenOnly;   // true = vehicle bus is in hardware LISTEN_ONLY (silent)
 
 // Initialise both controllers.  Returns false if either failed to come up.
+// The vehicle bus comes up LISTEN_ONLY unless g_cfg.diagBridge is set, in which
+// case it comes up in NORMAL mode (so the diagnostic response can be sent back).
 bool canInit();
 
-// Vehicle bus (listen-only).  Non-blocking; returns true when a frame was read.
+// Vehicle bus receive.  Non-blocking; returns true when a frame was read.
 bool vehReceive(CanFrame &f);
+
+// Vehicle bus transmit.  GUARDED: only succeeds when the diagnostic bridge has
+// put the bus in NORMAL mode (i.e. !g_vehListenOnly). Used solely to relay the
+// TCM's diagnostic response (diagRespId) back to the tester. Returns false (and
+// transmits nothing) whenever the bus is in listen-only mode.
+bool vehSend(const CanFrame &f);
 
 // TCM bus (active).  Non-blocking receive; returns true when a frame was read.
 bool tcmReceive(CanFrame &f);

@@ -1,8 +1,11 @@
 // =============================================================================
 //  mitm_engine.h  -  the man-in-the-middle gating + simulated-vehicle engine
 //
-//  Direction is hard-wired: VEHICLE --> TCM only.  Nothing this engine does can
-//  put a frame on the vehicle bus (there is no vehicle transmit function at all).
+//  Default direction is VEHICLE --> TCM only.  The one exception is the optional
+//  diagnostic bridge: when g_cfg.diagBridge is set, the TCM's diagnostic response
+//  (g_cfg.diagRespId, e.g. 0x7E9) is relayed back to the vehicle bus via the
+//  guarded vehSend().  That single ID is the only thing this engine can ever put
+//  on the car, and only while the bridge is enabled.
 // =============================================================================
 #pragma once
 #include <Arduino.h>
@@ -30,6 +33,8 @@ extern FrameRecord  g_sniff[MAX_SNIFF_IDS];
 extern uint32_t     g_forwardedCount;   // total frames forwarded veh->TCM
 extern uint32_t     g_blockedCount;     // total veh frames not forwarded
 extern uint32_t     g_overrideCount;    // total frames rewritten before forward
+extern uint32_t     g_diagToTcm;        // diag tester requests relayed veh->TCM
+extern uint32_t     g_diagToVeh;        // diag TCM responses relayed TCM->veh
 
 void mitmInit();
 

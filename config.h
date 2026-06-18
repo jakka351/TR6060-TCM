@@ -101,6 +101,17 @@ struct MitmConfig {
   bool     forceAutoConfig = true;   // override 0x640 so the TCM thinks it's an auto car
   bool     generateMissing = true;   // synthesise consumed msgs if absent on veh bus
 
+  // ---- Diagnostic bridge (OBD tester on the vehicle <-> TCM) ----------------
+  // >>> SAFETY <<< When this is enabled the VEHICLE bus leaves hardware
+  // LISTEN_ONLY and runs in NORMAL mode so the TCM's diagnostic response can be
+  // transmitted back to the tester. The bus then also ACKs all traffic. The
+  // ONLY frame ID we ever transmit on the vehicle bus is diagRespId. Applied at
+  // boot from this persisted flag; changing it requires a restart.
+  bool     diagBridge  = false;      // master enable for the OBD<->TCM diag bridge
+  uint32_t diagReqId   = 0x7E1;      // tester physical request   (vehicle -> TCM)
+  uint32_t diagReqFunc = 0x7DF;      // tester functional request (vehicle -> TCM); 0 = off
+  uint32_t diagRespId  = 0x7E9;      // TCM response (TCM -> vehicle) - the ONLY veh-bus TX
+
   // 0x640 (PCM_MSG_12) override values used when forceAutoConfig is on
   uint8_t  forwardGearCount = 6;     // ZF 6HP26 = 6 forward gears
   uint8_t  transConfig      = 0;     // 0 = Barra_E265, 1 = Copperhead
