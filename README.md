@@ -64,25 +64,31 @@ existing terminated bus — just tap it, do **not** add termination there.
 
 > The firmware was written against the libraries below but **could not be
 > compiled on the dev machine** — the ESP32 core and the web/JSON libraries are
-> not installed there yet. Install these four, then Verify in the IDE.
+> not installed there yet. Install these three, then Verify in the IDE.
 
 1. **ESP32 Arduino core 3.x** — Boards Manager → "esp32 by Espressif" (≥ 3.0.0).
    Provides WiFi, `Preferences`, and `driver/twai.h`. *(Not yet installed — the
    board index is downloaded but the core itself is missing.)*
-2. **mcp_canbus** — the Longan Labs MCP2515 library used by the ESP32-CAN-X2's
-   own examples (Library Manager → search **`mcp_canbus`**). It provides the
-   header `mcp_canbus.h` and assumes the 16 MHz crystal, so `CAN_500KBPS` is
-   correct.
-   *Note:* the libraries already on this machine — `canbed_dual.h` and the two
-   `mcp_can.h` copies (Longan + coryjfowler) — are **different APIs** and are not
-   used here. Installing `mcp_canbus` (a distinct header name) avoids the
-   duplicate-`mcp_can.h` clash entirely; no need to remove the others.
-3. **ESPAsyncWebServer** and **AsyncTCP** — use the maintained **ESP32Async**
+2. **ESPAsyncWebServer** and **AsyncTCP** — use the maintained **ESP32Async**
    forks (Library Manager → *"ESPAsyncWebServer"* by ESP32Async, which pulls in
    *"Async TCP"* by ESP32Async). The old me-no-dev versions do not build on
    core 3.x. *(Not yet installed.)*
-4. **ArduinoJson 7.x** — Library Manager → *"ArduinoJson"* by Benoit Blanchon.
+3. **ArduinoJson 7.x** — Library Manager → *"ArduinoJson"* by Benoit Blanchon.
    *(Not yet installed.)*
+
+**No CAN library is required.** The MCP2515 (TCM bus) is driven by this project's
+own `mcp_jakka.cpp/.h` (class `McpJakka`); the vehicle bus uses the ESP32's built-in TWAI
+driver. We deliberately dropped the Longan/Seeed `mcp_can` library — its RX path
+overruns the caller's buffer on a malformed DLC, its `begin()` re-inits SPI with
+the wrong pins for this board, and its `send()` blocks until each frame is on the
+wire. Our driver clamps every RX DLC to 8, leaves SPI pin setup to us, and sends
+fire-and-forget into the MCP2515's three TX buffers.
+
+> **Remove the stale CAN libraries** so they can't shadow anything: move
+> `mcp_can`, `Longan_CAN_MCP2515-master`, and
+> `Longan_Labs_Arduino_CAN_Bus_Library_for_MCP2515` out of
+> `Documents\Arduino\libraries\`. None are used now. (`ESP32-TWAI-CAN` is also
+> unused but harmless.)
 
 ### Board settings
 

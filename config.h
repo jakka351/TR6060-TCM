@@ -37,7 +37,8 @@
 #define MCP2515_SCK_GPIO    12
 #define MCP2515_MISO_GPIO   13
 #define MCP2515_INT_GPIO    3      // not strictly required (we poll) but broken out
-// MCP2515 crystal is 16 MHz on this board -> Longan mcp_canbus CAN_500KBPS is correct.
+#define MCP2515_XTAL_MHZ    16     // crystal fitted on the ESP32-CAN-X2
+#define MCP2515_SPI_HZ      10000000UL  // MCP2515 max SPI clock; drop to 8/4 MHz if wiring is marginal
 
 // ---- Misc ----
 #define STATUS_LED_GPIO     2      // on-board LED1
@@ -53,8 +54,10 @@
 // -----------------------------------------------------------------------------
 #define DEFAULT_AP_SSID     "FG-TCM-MITM"
 #define DEFAULT_AP_PASS     "falcon500"   // >= 8 chars required by WPA2
-#define WIFI_MODE_AP        0
-#define WIFI_MODE_STA       1
+// NB: do NOT name these WIFI_MODE_AP/WIFI_MODE_STA - those are members of the
+// ESP-IDF wifi_mode_t enum (pulled in by <WiFi.h>) and a #define would mangle it.
+#define WIFIMODE_AP         0
+#define WIFIMODE_STA        1
 
 // -----------------------------------------------------------------------------
 //  Limits / sizing
@@ -121,7 +124,7 @@ struct MitmConfig {
   ForwardRule rules[MAX_RULES];
 
   // WiFi
-  uint8_t  wifiMode = WIFI_MODE_AP;
+  uint8_t  wifiMode = WIFIMODE_AP;
   char     apSsid[32]  = DEFAULT_AP_SSID;
   char     apPass[64]  = DEFAULT_AP_PASS;
   char     staSsid[32] = "";

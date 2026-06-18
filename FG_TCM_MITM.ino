@@ -31,9 +31,10 @@
 //
 //  Libraries required (see README.md for versions/sources):
 //    - ESP32 Arduino core 3.x       (WiFi, Preferences, driver/twai.h)
-//    - mcp_canbus                   (Autosport Labs / Longan Labs, MCP2515)
 //    - ESPAsyncWebServer + AsyncTCP (ESP32Async maintained forks)
 //    - ArduinoJson 7.x
+//  The MCP2515 (TCM bus) is driven by our own mcp_jakka.* (class McpJakka) - NO
+//  external CAN library is needed (we dropped the buggy Longan/Seeed mcp_can lib).
 // =============================================================================
 #include "config.h"
 #include "can_interfaces.h"

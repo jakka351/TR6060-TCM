@@ -226,7 +226,7 @@ static void buildLiveJson(String &out) {
 //  WiFi + routes
 // -----------------------------------------------------------------------------
 static void startWifi() {
-  if (g_cfg.wifiMode == WIFI_MODE_STA && g_cfg.staSsid[0]) {
+  if (g_cfg.wifiMode == WIFIMODE_STA && g_cfg.staSsid[0]) {
     WiFi.mode(WIFI_STA);
     WiFi.begin(g_cfg.staSsid, g_cfg.staPass);
     uint32_t t0 = millis();

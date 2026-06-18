@@ -1,12 +1,9 @@
-#include <mcp_can.h>
-#include <mcp_can_dfs.h>
-
 // =============================================================================
 //  can_interfaces.cpp
 // =============================================================================
 #include "can_interfaces.h"
 #include <SPI.h>
-//#include "mcp_canbus.h"      // Autosport Labs / Longan Labs MCP2515 library
+#include "mcp_jakka.h"       // our own MCP2515 driver (class McpJakka; replaces the Longan/Seeed lib)
 #include "driver/twai.h"     // ESP-IDF TWAI (built into the ESP32 Arduino core)
 #include "freertos/FreeRTOS.h"   // pdMS_TO_TICKS, TickType_t
 
@@ -16,8 +13,10 @@ bool     g_vehOnline = false;
 bool     g_tcmOnline = false;
 bool     g_vehListenOnly = true;   // resolved in initVehicleBus()
 
-// MCP2515 object on the board's CS pin (TCM bus).
-static MCP_CAN s_mcp(MCP2515_CS_GPIO);
+// MCP2515 on the board's CS pin (TCM bus). We pass the global SPI instance; the
+// driver never re-inits SPI, so our custom ESP32-S3 pin map (set in initTcmBus)
+// is preserved.
+static McpJakka s_mcp(SPI, MCP2515_CS_GPIO, MCP2515_SPI_HZ);
 
 // ---- map firmware bitrate -> library constants -----------------------------
 static twai_timing_config_t twaiTiming(uint32_t br) {
@@ -29,16 +28,6 @@ static twai_timing_config_t twaiTiming(uint32_t br) {
     case 125000:  return TWAI_TIMING_CONFIG_125KBITS();
     case 100000:  return TWAI_TIMING_CONFIG_100KBITS();
     default:      return TWAI_TIMING_CONFIG_500KBITS();
-  }
-}
-static byte mcpBitrate(uint32_t br) {
-  switch (br) {
-    case 1000000: return CAN_1000KBPS;
-    case 500000:  return CAN_500KBPS;
-    case 250000:  return CAN_250KBPS;
-    case 125000:  return CAN_125KBPS;
-    case 100000:  return CAN_100KBPS;
-    default:      return CAN_500KBPS;
   }
 }
 
@@ -73,13 +62,12 @@ static bool initVehicleBus() {
 //  TCM bus = MCP2515 in normal mode.
 // -----------------------------------------------------------------------------
 static bool initTcmBus() {
-  // ESP32-S3 SPI must be told which pins to use before the MCP2515 library runs.
+  // We own SPI: set the board's pins once here. The driver never calls SPI.begin().
   SPI.begin(MCP2515_SCK_GPIO, MCP2515_MISO_GPIO, MCP2515_MOSI_GPIO, MCP2515_CS_GPIO);
   pinMode(MCP2515_INT_GPIO, INPUT);
 
-  byte br = mcpBitrate(g_cfg.tcmBitrate);
   for (int attempt = 0; attempt < 10; attempt++) {
-    if (s_mcp.begin(br) == CAN_OK) return true;   // 16 MHz crystal assumed by lib
+    if (s_mcp.begin(g_cfg.tcmBitrate, MCP2515_XTAL_MHZ)) return true;
     delay(100);
   }
   return false;
@@ -122,12 +110,12 @@ bool vehSend(const CanFrame &f) {
 }
 
 bool tcmReceive(CanFrame &f) {
-  if (s_mcp.checkReceive() != CAN_MSGAVAIL) return false;
-  uint8_t len = 0;
-  if (s_mcp.readMsgBuf(&len, f.data) != CAN_OK) return false;
-  f.id   = s_mcp.getCanId();
-  f.extd = s_mcp.isExtendedFrame();
-  f.len  = len > 8 ? 8 : len;
+  McpCanFrame m;
+  if (!s_mcp.receive(m)) return false;     // driver clamps DLC<=8 internally
+  f.id   = m.id;
+  f.extd = m.ext;
+  f.len  = m.len;
+  memcpy(f.data, m.data, m.len);
   f.ts   = millis();
   g_tcmStats.rx++;
   g_tcmStats._fpsAccum++;
@@ -135,12 +123,17 @@ bool tcmReceive(CanFrame &f) {
 }
 
 bool tcmSend(const CanFrame &f) {
-  byte ext = f.extd ? 1 : 0;
-  if (s_mcp.sendMsgBuf(f.id, ext, f.len, (byte *)f.data) == CAN_OK) {
+  McpCanFrame m;
+  m.id  = f.id;
+  m.ext = f.extd;
+  m.rtr = false;
+  m.len = f.len > 8 ? 8 : f.len;
+  memcpy(m.data, f.data, m.len);
+  if (s_mcp.send(m)) {                      // fire-and-forget into a free TX buffer
     g_tcmStats.tx++;
     return true;
   }
-  g_tcmStats.err++;
+  g_tcmStats.err++;                         // all TX buffers busy
   return false;
 }
 
@@ -158,5 +151,10 @@ void canTickStats() {
     } else if (st.state == TWAI_STATE_STOPPED) {
       twai_start();
     }
+  }
+
+  // TCM-side MCP2515: recover from bus-off (the old Longan lib couldn't do this).
+  if (g_tcmOnline && s_mcp.busOff()) {
+    s_mcp.reinit();
   }
 }
