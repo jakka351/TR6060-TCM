@@ -46,8 +46,6 @@ editable forwarding rules, a TCM-bus frame injector, and all configuration.
 
 <p align="right"> 
 <img align="right" src="https://user-images.githubusercontent.com/57064943/163706907-48fcd541-6998-42c8-a673-b33784e09128.png" height="25%" width="25%" /></p>
-</p>
-<br />
 
   
 ## 1. Hardware & wiring
